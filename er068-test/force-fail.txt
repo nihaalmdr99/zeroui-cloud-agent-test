@@ -1,3 +1,0 @@
-ER-068 live test.
-This file intentionally triggers a GitHub Actions check failure.
-Do not merge until the failure is resolved.
