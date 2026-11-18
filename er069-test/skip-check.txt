@@ -1,0 +1,2 @@
+ER-069 live test.
+Verify detection when a required GitHub Actions job is skipped.
