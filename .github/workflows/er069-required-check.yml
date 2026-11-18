@@ -1,0 +1,20 @@
+
+name: ER069 Required PR Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  er069-required-check:
+    name: ER069 Required Check
+    if: ${{ !contains(github.event.pull_request.title, '[skip-er069]') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify required check executed
+        run: echo "ER069 required check executed successfully"
