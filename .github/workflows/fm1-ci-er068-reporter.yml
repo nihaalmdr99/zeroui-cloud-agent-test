@@ -1,0 +1,111 @@
+
+name: FM1 CI ER068 Completion Reporter
+
+on:
+  workflow_run:
+    workflows:
+      - FM1 CI ER068 Failure Test
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  report-ci-failure:
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'failure' &&
+        github.event.workflow_run.event == 'workflow_dispatch' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == 'nihaalmdr99/zeroui-cloud-agent-test'
+      }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Report verified GitHub workflow failure to FM1
+        env:
+          FM1_URL: ${{ vars.FM1_PUBLIC_BASE_URL }}
+          FM1_TOKEN: ${{ secrets.FM1_SIGNAL_INTAKE_AUTH_TOKEN }}
+          TARGET_RUN_ID: ${{ github.event.workflow_run.id }}
+          TARGET_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+          TARGET_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TARGET_NAME: ${{ github.event.workflow_run.name }}
+          TARGET_URL: ${{ github.event.workflow_run.html_url }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          base = os.environ["FM1_URL"].strip().rstrip("/")
+          token = os.environ["FM1_TOKEN"].strip()
+
+          if not base.startswith("https://") or not token:
+              raise SystemExit("FM1 URL or intake token unavailable")
+
+          run_id = os.environ["TARGET_RUN_ID"]
+          attempt = os.environ["TARGET_ATTEMPT"]
+          event_id = f"github-ci-er068-{run_id}-{attempt}"
+
+          signal = {
+              "schema_version": "1",
+              "event_type_id": "ci.workflow.failed",
+              "source_system": "ci_cd",
+              "signal_method": "pipeline_job",
+              "provider": "github_actions",
+              "tenant_id": "T/AMAZON/001",
+              "repository": "nihaalmdr99/zeroui-cloud-agent-test",
+              "branch": os.environ["TARGET_BRANCH"],
+              "commit_hash": os.environ["TARGET_SHA"],
+              "trace_id": event_id,
+              "source_event_id": event_id,
+              "workflow_run_id": run_id,
+              "run_id": run_id,
+              "pipeline_id": run_id,
+              "workflow_name": os.environ["TARGET_NAME"],
+              "payload": {
+                  "required_gate": True,
+                  "workflow_completed": True,
+                  "workflow_failed": True,
+                  "workflow_conclusion": "failure",
+                  "scan_passed": False,
+                  "workflow_run_url": os.environ["TARGET_URL"],
+                  "workflow_run_id": run_id
+              },
+              "raw_metadata": {
+                  "ci_runner_marker": "github_actions",
+                  "ci_runner_detected": True
+              }
+          }
+
+          request = urllib.request.Request(
+              base + "/fm1/v1/ci/signals",
+              data=json.dumps(signal).encode("utf-8"),
+              headers={
+                  "Content-Type": "application/json",
+                  "X-FM1-Signal-Intake-Auth-Token": token
+              },
+              method="POST"
+          )
+
+          with urllib.request.urlopen(request, timeout=30) as response:
+              result = json.load(response)
+              print("HTTP status:", response.status)
+              for key in (
+                  "accepted",
+                  "ingest_status",
+                  "routing_status",
+                  "mapped_trigger_id",
+                  "decision_status",
+                  "decision_outcome",
+                  "receipt_ref",
+                  "reason_code"
+              ):
+                  print(f"{key}: {result.get(key)}")
+
+              if not result.get("accepted"):
+                  raise SystemExit("FM1 rejected the CI signal")
+          PY
