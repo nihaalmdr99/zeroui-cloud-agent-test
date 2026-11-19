@@ -2,3 +2,4 @@ ER-001 small change test
 Expected no size violation
 Verify updated policy evaluator
 ER-001 fresh evaluation after base branch correction.
+ER-001 retest after FM-1 PostgreSQL startup fix.
